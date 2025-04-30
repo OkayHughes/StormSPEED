@@ -76,11 +76,12 @@ module namelist_mod
     use time_mod,        only: tstep, nsplit
     use control_mod,     only: nu, nu_div, nu_p, nu_s, nu_q, rsplit,qsplit, &
                                vert_remap_q_alg, vert_remap_u_alg
-    use control_mod,     only: dt_remap_factor, dt_tracer_factor, tstep_type, rsplit, qsplit
+    use control_mod,     only: dt_remap_factor, dt_tracer_factor, tstep_type, rsplit, qsplit, theta_hydrostatic_mode
     use control_mod,     only: integration, restartfile,timestep_make_subcycle_parameters_consistent, &
                                hypervis_subcycle_q, transport_alg, limiter_option, prescribed_wind
     use physical_constants, only : scale_factor, scale_factor_inv, domain_size, laplacian_rigid_factor, &
                                    dd_pi, rrearth, rearth
+    use cube_mod,   only: rotate_grid
 
 !!$    use control_mod,     only: dcmip16_mu, dcmip16_mu_s, dcmip16_mu_q
 
@@ -178,6 +179,23 @@ module namelist_mod
     scale_factor_inv = rrearth
     domain_size = 4.0D0*DD_PI
     laplacian_rigid_factor = rrearth
+#ifdef HOMMEDA
+    if(par%masterproc) print *, "THETA_L model is running in Deep Atmosphere configuration"
+    if ( rotate_grid /= 0 ) then
+      if(par%masterproc) print *, 'DA (deep atmosphere) cannot run with rotate_grid != 0'
+      call abortmp('stopping')
+    end if
+    if ( ( rsplit == 0 ) .or. (dt_remap_factor == 0) ) then
+      if(par%masterproc) print *, 'DA (deep atmosphere) cannot run with rsplit or dt_remap = 0'
+      call abortmp('stopping')
+    end if
+    if ( theta_hydrostatic_mode ) then
+        if(par%masterproc) print *, 'DA (deep atmosphere) cannot run with theta_hydrostatic_mode=T'
+        call abortmp('stopping')
+    endif
+#endif
+    
+
 
 #ifdef _PRIM
     if (limiter_option==8 .or. limiter_option==84 .or. limiter_option == 9) then

@@ -80,6 +80,7 @@ OPTIONS
      -cpl               Coupling framework [mct | nuopc].  Default: mct.
      -dyn <name>        Dynamical core option: [fv | se | fv3 | mpas].  Default: fv.
      -se_dyn_target <name> hydro/nonhydro HPC target: [cam | preqx | preqx_acc | preqx_kokkos | theta-l | theta-l_kokkos].  Default: cam.
+     -homme_is_deep     Enables the Deep Atmosphere configuration of senh.
      -edit_chem_mech    Invokes CAMCHEM_EDITOR to allow the user to edit the chemistry mechanism file
      -hgrid <name>      Specify horizontal grid.  Use nlatxnlon for spectral grids;
                         dlatxdlon for fv grids (dlat and dlon are the grid cell size
@@ -250,6 +251,7 @@ GetOptions(
     "debug"                     => \$opts{'debug'},
     "dyn=s"                     => \$opts{'dyn'},
     "se_dyn_target=s"           => \$opts{'se_dyn_target'},
+    "homme_is_deep"             => \$opts{'homme_is_deep'},
     "edit_chem_mech"            => \$opts{'edit_chem_mech'},
     "esmf_libdir=s"             => \$opts{'esmf_libdir'},
     "fc=s"                      => \$opts{'fc'},
@@ -642,6 +644,7 @@ if ($dyn_pkg eq 'se') {
 	$se_dyn_target = $opts{'se_dyn_target'};
     }
 
+    
     print  "se_dyn_target=  $se_dyn_target\n";
     if (substr($opts{'se_dyn_target'},0,5) eq 'preqx') {
 	# preqx, preqx_acc, preqx_kokkos use 'preqx' namelist defaults
@@ -651,6 +654,8 @@ if ($dyn_pkg eq 'se') {
     if (substr($opts{'se_dyn_target'},0,5) eq 'theta') {
 	# theta-l (f code) and theta-l_kokkos (cxx code) use 'theta-l' namelist defaults
 	$cfg_ref->set('se_dyn_target', 'theta-l');
+
+
 	$se_bld_target =  'theta-l';
     }
     if (substr($opts{'se_dyn_target'},0,3) eq 'cam') {
@@ -1825,6 +1830,10 @@ if ($dyn_pkg eq 'se') {
     if($se_dyn_target eq 'theta-l' or $se_dyn_target eq 'theta-l_kokkos') {
 	my $csnp = $cfg_ref->get('csnp');
 	$cfg_cppdefs .= " -DCAM  -DNP=$csnp -DHAVE_F2003_PTR_BND_REMAP -DHOMME_ENABLE_COMPOSE -DMODEL_THETA_L";
+    if (defined $opts{'homme_is_deep'}) {
+	  $cfg_cppdefs .= " -DHOMMEDA"
+    }
+
 
 	# Check to see if physics grid is being used
 	my $npg = $cfg_ref->get('npg');
@@ -2313,11 +2322,21 @@ sub write_cppdefs
 
     my $dyn           = $cfg_ref->get('dyn');
     if ($dyn eq "se" and $opts{"se_dyn_target"} eq "theta-l") {
-        print $fh " -DMODEL_THETA_L -DHOMME_ENABLE_COMPOSE "
+        print $fh " -DMODEL_THETA_L -DHOMME_ENABLE_COMPOSE ";
+        if (defined $opts{"homme_is_deep"}) {
+	       print $fh " -DHOMMEDA ";
+        }
+
+
     }
 
     if ($dyn eq "se" and $opts{"se_dyn_target"} eq "theta-l_kokkos") {
-        print $fh " -DKOKKOS_TARGET -DMODEL_THETA_L -DHOMME_ENABLE_COMPOSE -DCOMPOSE_PORT "
+        print $fh " -DKOKKOS_TARGET -DMODEL_THETA_L -DHOMME_ENABLE_COMPOSE -DCOMPOSE_PORT ";
+        if (defined $opts{"homme_is_deep"}) {
+	       print $fh " -DHOMMEDA ";
+        }
+
+
     }
 
     print $fh "\n";
