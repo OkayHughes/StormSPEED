@@ -30,12 +30,13 @@ module ic_baroclinic
        T0P        = 240.0_r8,         & ! Temperature at polar surface (K)
        B          = 2.0_r8,           & ! Jet half-width parameter
        KK         = 3.0_r8,           & ! Jet width parameter
-       lapse      = 0.005_r8            ! Lapse rate parameter
+       lapse      = 0.005_r8,          & ! Lapse rate parameter
+       skamarock_factor = 0.8_r8
 
   real(r8), parameter, private ::     &
-       pertu0     = 0.5_r8,           & ! SF Perturbation wind velocity (m/s)
+       pertu0     = 0.0_r8,           & ! SF Perturbation wind velocity (m/s)
        pertr      = 1.0_r8/6.0_r8,    & ! SF Perturbation radius (Earth radii)
-       pertup     = 1.0_r8,           & ! Exp. perturbation wind velocity (m/s)
+       pertup     = 0.0_r8,           & ! Exp. perturbation wind velocity (m/s)
        pertexpr   = 0.1_r8,           & ! Exp. perturbation radius (Earth radii)
        pertlon    = pi/9.0_r8,        & ! Perturbation longitude
        pertlat    = 2.0_r8*pi/9.0_r8, & ! Perturbation latitude
@@ -422,7 +423,7 @@ contains
     !--------------------------------------------
     aref = rearth / bigX
 
-    T0 = 0.5_r8 * (T0E + T0P)
+    T0 =  skamarock_factor * T0E + (1_r8 - skamarock_factor) * T0P
     constA = 1.0_r8 / lapse
     constB = (T0 - T0P) / (T0 * T0P)
     constC = 0.5_r8 * (KK + 2.0_r8) * (T0E - T0P) / (T0E * T0P)
@@ -468,7 +469,7 @@ contains
     !--------------------------------------------
     aref = rearth / bigX
 
-    T0 = 0.5_r8 * (T0E + T0P)
+    T0 = skamarock_factor * T0E + (1.0_r8 - skamarock_factor) * T0P
     constA = 1.0_r8 / lapse
     constB = (T0 - T0P) / (T0 * T0P)
     constC = 0.5_r8 * (KK + 2.0_r8) * (T0E - T0P) / (T0E * T0P)
@@ -517,7 +518,7 @@ contains
     aref = rearth / bigx
     omegaref = omega * bigx
 
-    T0 = 0.5_r8 * (T0E + T0P)
+    T0 = skamarock_factor * T0E + (1_r8 - skamarock_factor) * T0P
 
     constH = Rair * T0 / gravit
 
