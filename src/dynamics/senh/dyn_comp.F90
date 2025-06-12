@@ -11,8 +11,8 @@ use cam_history_support,     only: max_fieldname_len
 use cam_initfiles,           only: initial_file_get_id, topo_file_get_id, pertlim
 use cam_logfile,             only: iulog
 use cam_map_utils,           only: iMap
-use control_mod,             only: hypervis_subcycle_q, integration, statefreq, runtype, use_moisture
-use dimensions_mod,          only: nelemd, nlev, np, npsq, ne, ne_x, ne_y, fv_nphys,qsize
+use control_mod_cam,         only: hypervis_subcycle_q, integration, statefreq, runtype, use_moisture
+use dimensions_mod_cam,      only: nelemd, nlev, np, npsq, ne, ne_x, ne_y, fv_nphys,qsize
 use dyn_grid,                only: timelevel, dom_mt, hvcoord, ini_grid_hdim_name
 !jtuse dyn_grid,                only: get_horiz_grid_dim_d, dyn_decomp, fv_nphys, ini_grid_name
 use dyn_grid,                only: get_horiz_grid_dim_d, dyn_decomp, ini_grid_name
@@ -21,10 +21,10 @@ use edge_mod,                only: edgevpack_nlyr, edgevunpack_nlyr, edge_g
 use element_mod,             only: element_t
 use element_state,           only: elem_state_t
 use gllfvremap_mod,          only: gfr_fv_phys_to_dyn_topo
-use hybrid_mod,              only: hybrid_create, hybrid_t
+use hybrid_mod_cam,          only: hybrid_create_cam, hybrid_t
 use inic_analytic,           only: analytic_ic_active, analytic_ic_set_ic
 use ncdio_atm,               only: infld
-use parallel_mod,            only: par, initmp
+use parallel_mod_cam,        only: par, initmp
 use perf_mod,                only: t_startf, t_stopf
 use physconst,               only: pi
 use pio,                     only: file_desc_t, io_desc_t, pio_double, PIO_BCAST_ERROR, &
@@ -35,9 +35,10 @@ use shr_kind_mod,            only: r8 => shr_kind_r8, shr_kind_cl
 use shr_const_mod,           only: SHR_CONST_PI
 use shr_sys_mod,             only: shr_sys_flush
 use spmd_utils,              only: iam, npes_cam => npes, masterproc
-use thread_mod,              only:  hthreads, vthreads, omp_get_max_threads, omp_get_thread_num, initomp
+use thread_mod_cam,          only:  hthreads, vthreads, omp_get_max_threads, omp_get_thread_num, initomp
 use time_mod,                only: nsplit,tstep
 use time_manager,            only: is_first_step
+use shr_infnan_mod,          only: isnan => shr_infnan_isnan
 
 implicit none
 private
@@ -70,6 +71,7 @@ logical, public, protected :: write_restart_unstruct
 ! Frontogenesis indices
 integer, public :: frontgf_idx = -1
 integer, public :: frontga_idx = -1
+integer, public :: vort4gw_idx      = -1
 
 interface read_dyn_var
    module procedure read_dyn_field_2d
@@ -88,31 +90,31 @@ CONTAINS
 
 subroutine dyn_readnl(NLFileName)
   use namelist_utils, only: find_group_name
-  use namelist_mod,   only: homme_set_defaults, homme_postprocess_namelist
+  use namelist_mod_cam, only: homme_set_defaults, homme_postprocess_namelist
   use units,          only: getunit, freeunit
-  use spmd_utils,     only: masterproc, masterprocid, mpicom, npes
-  use spmd_utils,     only: mpi_real8, mpi_integer, mpi_character, mpi_logical
-  use control_mod,    only: hypervis_order, hypervis_subcycle, hypervis_scaling
-  use control_mod,    only: hypervis_subcycle_tom, planar_slice
-  use control_mod,    only: hypervis_subcycle_q, integration, statefreq, runtype
-  use control_mod,    only: nu, nu_div, nu_p, nu_q, nu_s, nu_top, qsplit, rsplit
-  use control_mod,    only: vert_remap_q_alg, tstep_type, rk_stage_user
-  use control_mod,    only: ftype, limiter_option, partmethod
-  use control_mod,    only: topology, transport_alg, tstep_type
-  use control_mod,    only: z2_map_method,pgrad_correction,precon_method, theta_advect_form
-  use control_mod,    only: theta_hydrostatic_mode, vert_remap_u_alg, vtheta_thresh
-  use control_mod,    only: dt_remap_factor, dt_tracer_factor, geometry, hv_ref_profiles
-  use control_mod,    only: hv_theta_correction, hv_theta_thresh
-  use control_mod,    only: coord_transform_method, cubed_sphere_map, dp3d_thresh, hv_theta_correction
-  use control_mod,    only: semi_lagrange_cdr_alg, semi_lagrange_cdr_check, semi_lagrange_hv_q, semi_lagrange_nearest_point_lev
+  use spmd_utils,       only: masterproc, masterprocid, mpicom, npes, &
+                              mpi_real8, mpi_integer, mpi_character, mpi_logical
+  use control_mod_cam,  only: hypervis_order, hypervis_subcycle, hypervis_scaling, &
+                              hypervis_subcycle_tom, planar_slice, &
+                              hypervis_subcycle_q, integration, statefreq, runtype, &
+                              nu, nu_div, nu_p, nu_q, nu_s, nu_top, qsplit, rsplit, &
+                              vert_remap_q_alg, tstep_type, rk_stage_user, &
+                              ftype, limiter_option, partmethod, &
+                              topology, transport_alg, tstep_type, &
+                              z2_map_method,pgrad_correction,precon_method, theta_advect_form, &
+                              theta_hydrostatic_mode, vert_remap_u_alg, vtheta_thresh, &
+                              dt_remap_factor, dt_tracer_factor, geometry, hv_ref_profiles, &
+                              hv_theta_correction, hv_theta_thresh, &
+                              coord_transform_method, cubed_sphere_map, dp3d_thresh, hv_theta_correction, &
+                              semi_lagrange_cdr_alg, semi_lagrange_cdr_check, semi_lagrange_hv_q, semi_lagrange_nearest_point_lev
 #ifndef MODEL_THETA_L
-  use control_mod,    only: fine_ne, hypervis_power, hypervis_scaling
-  use control_mod,    only: max_hypervis_courant
+  use control_mod_cam, only: fine_ne, hypervis_power, hypervis_scaling, &
+                             max_hypervis_courant
   use fvm_mod,        only: fvm_ideal_test, fvm_test_type
   use fvm_mod,        only: fvm_get_test_type
   use native_mapping, only: native_mapping_readnl
 #endif
-  use dimensions_mod, only: qsize, qsize_d, ntrac, ntrac_d, npsq, ne, npart, lcp_moist
+  use dimensions_mod_cam, only: qsize, qsize_d, ntrac, ntrac_d, npsq, ne, npart, lcp_moist
   use constituents,   only: pcnst
   use params_mod,     only: SFCURVE, SPHERE_COORDS, Z2_NO_TASK_MAPPING
   use physical_constants, only: lx, ly
@@ -732,7 +734,7 @@ subroutine dyn_register()
 
    use physics_buffer,  only: pbuf_add_field, dtype_r8
    use ppgrid,          only: pcols, pver
-   use phys_control,    only: use_gw_front, use_gw_front_igw
+   use phys_control,    only: use_gw_front, use_gw_front_igw, use_gw_movmtn_pbl
 
    ! These fields are computed by the dycore and passed to the physics via the
    ! physics buffer.
@@ -742,6 +744,10 @@ subroutine dyn_register()
          frontgf_idx)
       call pbuf_add_field("FRONTGA", "global", dtype_r8, (/pcols,pver/), &
          frontga_idx)
+   end if
+   if (use_gw_movmtn_pbl) then
+      call pbuf_add_field("VORT4GW", "global", dtype_r8, (/pcols,pver/),       &
+         vort4gw_idx)
    end if
 
 end subroutine dyn_register
@@ -755,10 +761,11 @@ subroutine dyn_init(dyn_in, dyn_out)
     use cam_instance,     only: inst_index
 !jt    use native_mapping,   only: create_native_mapping_files
     use cam_pio_utils,    only: clean_iodesc_list
-
+    use constituents,     only: pcnst
+    use dimensions_mod_cam,only: cnst_longname_gll, cnst_name_gll
     use prim_driver_mod,  only: prim_init2
-    use parallel_mod,     only: par
-    use control_mod,      only: runtype
+    use parallel_mod_cam, only: par
+    use control_mod_cam,  only: runtype
 !jt    use comsrf,           only: sgh, sgh30
     use element_ops,      only: set_thermostate
 !jt    use nctopo_util_mod,  only: nctopo_util_driver
@@ -786,6 +793,10 @@ subroutine dyn_init(dyn_in, dyn_out)
 !jt   call create_native_mapping_files(par, elem, 'native')
 !jt   call create_native_mapping_files(par, elem, 'bilin')
 
+   ! allocate and set condenstate vars
+   allocate(cnst_name_gll(pcnst))     ! constituent names for gll tracers
+   allocate(cnst_longname_gll(pcnst)) ! long name of constituents for gll tracers
+
    call set_phis(dyn_in)
 
    if (initial_run) then
@@ -806,7 +817,7 @@ subroutine dyn_init(dyn_in, dyn_out)
        ithr=omp_get_thread_num()
        nets=dom_mt(ithr)%start
        nete=dom_mt(ithr)%end
-       hybrid = hybrid_create(par,ithr,hthreads)
+       hybrid = hybrid_create_cam(par,ithr,hthreads)
 
 
 !!$       ! scale PS to achieve prescribed dry mass
@@ -844,11 +855,11 @@ end subroutine dyn_init
     ! !USES:
 !jt    use iop_data_mod,     only: single_column, dp_crm, use_3dfrc
 !jt    use se_iop_intr_mod,  only: apply_iop_forcing
-    use parallel_mod,     only : par
+    use parallel_mod_cam,   only : par
     use prim_driver_mod,  only: prim_run_subcycle
-    use dimensions_mod,   only : nlev
+    use dimensions_mod_cam, only : nlev
     use time_mod,         only: tstep
-    use hybrid_mod,       only: hybrid_create
+    use hybrid_mod_cam,     only: hybrid_create_cam
     implicit none
 
 
@@ -875,7 +886,7 @@ end subroutine dyn_init
        ithr=omp_get_thread_num()
        nets=dom_mt(ithr)%start
        nete=dom_mt(ithr)%end
-       hybrid = hybrid_create(par,ithr,hthreads)
+       hybrid = hybrid_create_cam(par,ithr,hthreads)
 
        do_prim_run = .true. ! Always do prim_run_subcycle
                             ! Unless turned off by SCM for specific cases
@@ -934,6 +945,11 @@ end subroutine dyn_final
 
 subroutine read_inidat(dyn_in)
 
+  use air_composition,    only: thermodynamic_active_species_num, thermodynamic_active_species_idx
+  use air_composition,    only: thermodynamic_active_species_idx_dycore
+  use air_composition,    only: thermodynamic_active_species_liq_idx,thermodynamic_active_species_ice_idx
+  use air_composition,    only: thermodynamic_active_species_liq_idx_dycore,thermodynamic_active_species_ice_idx_dycore
+  use air_composition,    only: thermodynamic_active_species_liq_num, thermodynamic_active_species_ice_num
   use aoa_tracers,             only: aoa_tracers_implements_cnst, aoa_tracers_init_cnst
   use constituents,            only: cnst_name, cnst_read_iv, qmin,cnst_is_a_water_species
   use cam_control_mod,         only: ideal_phys, aqua_planet
@@ -946,6 +962,8 @@ subroutine read_inidat(dyn_in)
   use clubb_intr,              only: clubb_implements_cnst, clubb_init_cnst
   use co2_cycle,               only: co2_implements_cnst, co2_init_cnst
   use const_init,              only: cnst_init_default
+  use constituents,            only: cnst_name, cnst_longname
+  use dimensions_mod_cam,      only: cnst_name_gll, cnst_longname_gll
   use dof_mod,                 only: putUniquePoints
   use edge_mod,                only : edgevpack_nlyr, edgevunpack_nlyr, edge_g
   use element_ops,             only: set_thermostate
@@ -1020,7 +1038,7 @@ subroutine read_inidat(dyn_in)
     integer,  allocatable            :: glob_ind(:)
     integer,  allocatable            :: m_ind(:)
     real(r8), allocatable            :: dbuf4(:,:,:,:)
-    integer :: ithr, nets, nete
+    integer :: ithr, nets, nete, m
 
     tl = 1
 
@@ -1040,10 +1058,26 @@ subroutine read_inidat(dyn_in)
     tmp = 0.0_r8
     qtmp = 0.0_r8
 
-!!$    if (fv_nphys>0) then
-!!$      nphys_sq = fv_nphys*fv_nphys
-!!$      allocate(phis_tmp(nphys_sq,nelemd))
-!!$    end if
+    do m=1,pcnst
+       if (m.le.thermodynamic_active_species_num) then
+          thermodynamic_active_species_idx_dycore(m) = thermodynamic_active_species_idx(m)
+       end if
+       cnst_name_gll    (m)                = cnst_name    (m)
+       cnst_longname_gll(m)                = cnst_longname(m)
+    end do
+
+    do m=1,thermodynamic_active_species_liq_num
+       thermodynamic_active_species_liq_idx_dycore(m) = thermodynamic_active_species_liq_idx(m)
+       if (masterproc) then
+          write(iulog,*) subname//": m,thermodynamic_active_species_idx_liq_dycore: ",m,thermodynamic_active_species_liq_idx_dycore(m)
+       end if
+    end do
+    do m=1,thermodynamic_active_species_ice_num
+       thermodynamic_active_species_ice_idx_dycore(m) = thermodynamic_active_species_ice_idx(m)
+       if (masterproc) then
+          write(iulog,*) subname//": m,thermodynamic_active_species_idx_ice_dycore: ",m,thermodynamic_active_species_ice_idx_dycore(m)
+       end if
+    end do
 
     if (par%dynproc) then
       if(elem(1)%idxP%NumUniquePts <=0 .or. elem(1)%idxP%NumUniquePts > np*np) then
@@ -1466,7 +1500,7 @@ subroutine read_inidat(dyn_in)
    ithr=omp_get_thread_num()
    nets=dom_mt(ithr)%start
    nete=dom_mt(ithr)%end
-   hybrid = hybrid_create(par,ithr,hthreads)
+   hybrid = hybrid_create_cam(par,ithr,hthreads)
 
    ! If scale_dry_air_mass > 0.0 then scale dry air mass to scale_dry_air_mass global average dry pressure
    ! scale PS to achieve prescribed dry mass

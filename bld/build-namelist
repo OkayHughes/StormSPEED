@@ -3847,7 +3847,15 @@ if (!$simple_phys) {
     }
 
     if ($phys =~ /cam7/) {
-       add_default($nl, 'use_gw_movmtn_pbl',        'val'=>'.true.');
+	#
+	# moving mountains only supported by SE dycore
+	# (since vorticity needs to be passed to physics in dp_coupling)
+	#
+	if ( $dyn =~ /se/ ) {
+	    add_default($nl, 'use_gw_movmtn_pbl',        'val'=>'.true.');
+	} else {
+	    add_default($nl, 'use_gw_movmtn_pbl',        'val'=>'.false.');
+	}
     }
 
     my $use_gw_movmtn_pbl = $nl->get_value('use_gw_movmtn_pbl');
@@ -4242,12 +4250,14 @@ if ($dyn =~ /se/) {
 		       se_limiter_option
 		       se_lx
 		       se_ly
-		       se_ne
 		       se_ne_x
 		       se_ne_y
 		       se_nsplit
 		       se_partmethod
-		       se_rk_stage_user
+		       se_semi_lagrange_cdr_alg
+		       se_semi_lagrange_cdr_check
+		       se_semi_lagrange_hv_q
+		       se_semi_lagrange_nearest_point_lev
 		       se_topology
 		       se_tstep
 		       se_statefreq
@@ -4258,6 +4268,9 @@ if ($dyn =~ /se/) {
 		       se_vert_remap_q_alg
 		       se_vthreads
 		       se_z2_map_method
+		       interpolate_output
+		       interpolate_nlat
+		       interpolate_nlon
 	    );
 	# Add the collected vars
 	foreach my $var (@vars) {
@@ -4297,6 +4310,9 @@ if ($dyn =~ /se/) {
                   se_molecular_diff
 	          se_pgf_formulation
 	          se_dribble_in_rsplit_loop
+		  interpolate_output
+		  interpolate_nlat
+		  interpolate_nlon
         );
 
 
