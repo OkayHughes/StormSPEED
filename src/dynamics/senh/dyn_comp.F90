@@ -678,7 +678,14 @@ end subroutine dyn_register
 !=============================================================================================
 
 subroutine dyn_init(dyn_in, dyn_out)
+  use air_composition,    only: thermodynamic_active_species_num, thermodynamic_active_species_idx
+  use air_composition,    only: thermodynamic_active_species_idx_dycore
+  use air_composition,    only: thermodynamic_active_species_liq_idx,thermodynamic_active_species_ice_idx
+  use air_composition,    only: thermodynamic_active_species_liq_idx_dycore,thermodynamic_active_species_ice_idx_dycore
+  use air_composition,    only: thermodynamic_active_species_liq_num, thermodynamic_active_species_ice_num
+  use constituents,            only: cnst_name, cnst_longname
 
+ 
     use dyn_grid,         only: elem
     use cam_control_mod,  only: aqua_planet, ideal_phys, adiabatic
     use cam_instance,     only: inst_index
@@ -696,10 +703,11 @@ subroutine dyn_init(dyn_in, dyn_out)
     type (dyn_import_t), intent(out) :: dyn_in
     type (dyn_export_t), intent(out) :: dyn_out
 
-    integer :: ithr, nets, nete, ie, k, tlev
+    integer :: ithr, nets, nete, ie, k, tlev, m
     real(r8), parameter :: Tinit=300.0_r8
     type(hybrid_t) :: hybrid
     real(r8) :: temperature(np,np,nlev),ps(np,np)
+    character*16 :: subname='READ_INIDAT'
    !----------------------------------------------------------------------------
 
   !use_moisturefor homme routines
@@ -726,6 +734,35 @@ subroutine dyn_init(dyn_in, dyn_out)
       call read_inidat(dyn_in)
       call clean_iodesc_list()
    end if
+
+    do m=1,pcnst
+       if (m.le.thermodynamic_active_species_num) then
+          thermodynamic_active_species_idx_dycore(m) = thermodynamic_active_species_idx(m)
+       end if
+       cnst_name_gll    (m)                = cnst_name    (m)
+       cnst_longname_gll(m)                = cnst_longname(m)
+    end do
+
+    do m=1,thermodynamic_active_species_liq_num
+       thermodynamic_active_species_liq_idx_dycore(m) = thermodynamic_active_species_liq_idx(m)
+       if (masterproc) then
+          write(iulog,*) subname//": m,thermodynamic_active_species_idx_liq_dycore: ",m,thermodynamic_active_species_liq_idx_dycore(m)
+       end if
+    end do
+    do m=1,thermodynamic_active_species_ice_num
+       thermodynamic_active_species_ice_idx_dycore(m) = thermodynamic_active_species_ice_idx(m)
+       if (masterproc) then
+          write(iulog,*) subname//": m,thermodynamic_active_species_idx_ice_dycore: ",m,thermodynamic_active_species_ice_idx_dycore(m)
+       end if
+    end do
+
+    if (par%dynproc) then
+      if(elem(1)%idxP%NumUniquePts <=0 .or. elem(1)%idxP%NumUniquePts > np*np) then
+         write(iulog,*)  elem(1)%idxP%NumUniquePts
+         call endrun(trim(subname)//': invalid idxP%NumUniquePts')
+      end if
+    end if
+
 
     if(par%dynproc) then
 
@@ -979,35 +1016,6 @@ subroutine read_inidat(dyn_in)
 !jt    allocate(qtmp(npsq*nelemd,nlev))
     tmp = 0.0_r8
     qtmp = 0.0_r8
-
-    do m=1,pcnst
-       if (m.le.thermodynamic_active_species_num) then
-          thermodynamic_active_species_idx_dycore(m) = thermodynamic_active_species_idx(m)
-       end if
-       cnst_name_gll    (m)                = cnst_name    (m)
-       cnst_longname_gll(m)                = cnst_longname(m)
-    end do
-
-    do m=1,thermodynamic_active_species_liq_num
-       thermodynamic_active_species_liq_idx_dycore(m) = thermodynamic_active_species_liq_idx(m)
-       if (masterproc) then
-          write(iulog,*) subname//": m,thermodynamic_active_species_idx_liq_dycore: ",m,thermodynamic_active_species_liq_idx_dycore(m)
-       end if
-    end do
-    do m=1,thermodynamic_active_species_ice_num
-       thermodynamic_active_species_ice_idx_dycore(m) = thermodynamic_active_species_ice_idx(m)
-       if (masterproc) then
-          write(iulog,*) subname//": m,thermodynamic_active_species_idx_ice_dycore: ",m,thermodynamic_active_species_ice_idx_dycore(m)
-       end if
-    end do
-
-    if (par%dynproc) then
-      if(elem(1)%idxP%NumUniquePts <=0 .or. elem(1)%idxP%NumUniquePts > np*np) then
-         write(iulog,*)  elem(1)%idxP%NumUniquePts
-         call endrun(trim(subname)//': invalid idxP%NumUniquePts')
-      end if
-    end if
-
     ! Set mask to indicate which columns are active
     nullify(ldof)
     call cam_grid_get_gcid(cam_grid_id(ini_grid_name), ldof)
