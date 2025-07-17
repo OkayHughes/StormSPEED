@@ -21,7 +21,7 @@ module stepon
    use time_manager,   only: get_step_size, is_first_restart_step
 ! from SE
    use derivative_mod,     only : derivinit, derivative_t
-   use viscosity_mod,      only : compute_zeta_C0, compute_div_C0
+   use viscosity_mod,      only : compute_zeta_C0, compute_div_C0, make_C0
    use quadrature_mod,     only : gauss, gausslobatto, quadrature_t
    use edge_mod,           only : edge_g, edgeVpack_nlyr, edgeVunpack_nlyr
    use parallel_mod_cam,   only : par
@@ -120,6 +120,8 @@ subroutine stepon_init(dyn_in, dyn_out )
   call register_vector_field('FU', 'FV')
   call addfld ('VOR', (/ 'lev' /), 'A', '1/s',  'Vorticity',                   gridname='GLL')
   call addfld ('DIV', (/ 'lev' /), 'A', '1/s',  'Divergence',                  gridname='GLL')
+  call addfld ('EPV', (/ 'lev' /), 'I', 'K m2/kg/s',  'Ertels potential vorticity',                   gridname='GLL')
+  call addfld ('POTTEMP', (/ 'lev' /), 'I', 'K',  'Potential temperature',                   gridname='GLL')
 
   if (smooth_phis_numcycle>0) then
      call addfld ('PHIS_SM',  horiz_only, 'I', 'm2/s2', 'Surface geopotential (smoothed)',                gridname='GLL')
@@ -294,6 +296,8 @@ subroutine stepon_run2(phys_state, phys_tend, dyn_in, dyn_out )
    real(r8) :: rec2dt
    real(r8) :: dp(np,np,nlev),fq,fq0,qn0, ftmp(npsq,nlev,2)
    real(r8) :: tmp_dyn(np,np,nlev,nelemd)
+   real(r8) :: grad_pottemp(np,np,nlev,2,nelemd)
+   real(r8) :: vort(np,np,nlev,nelemd)
    real(r8) :: tmp_dyn_i(np,np,nlevp)
    real(r8) :: fmtmp(np,np,nlev)
    real(r8) :: p_m(np,np,nlev)    ! temporary midpoint pressure for DYN_OMEGA output
@@ -383,7 +387,7 @@ subroutine stepon_run2(phys_state, phys_tend, dyn_in, dyn_out )
       do ie=1,nelemd
          call outfld('VOR',tmp_dyn(1,1,1,ie),npsq,ie)
       enddo
-!jt   endif
+   endif
    if (hist_fld_active('DIV')) then
       call compute_div_C0(tmp_dyn,dyn_in%elem,par,tl_f)
       do ie=1,nelemd
@@ -391,6 +395,26 @@ subroutine stepon_run2(phys_state, phys_tend, dyn_in, dyn_out )
       enddo
    endif
 
+   if (hist_fld_active('POTTEMP')) then
+         do ie=1,nelemd
+          call get_field(dyn_in%elem(ie),'pottemp',tmp_dyn(:,:,:,ie),hvcoord,tl_f,1)
+          ! time level ntQ is not used
+          call outfld('POTTEMP',tmp_dyn(1,1,1,ie),npsq,ie)
+         enddo
+   endif
+
+   if (hist_fld_active('EPV')) then
+      do ie=1,nelemd
+        call get_field(dyn_in%elem(ie),'potvort',tmp_dyn(:,:,:,ie),hvcoord,tl_f,1)
+      enddo
+      call make_C0(tmp_dyn,dyn_in%elem,par)
+     
+      do ie=1,nelemd
+         call outfld('EPV',tmp_dyn(1,1,1,ie),npsq,ie)
+      enddo
+   endif
+ 
+ 
    if (hist_fld_active('DYN_PNH')) then
          do ie=1,nelemd
           ! time level ntQ is not used
@@ -429,7 +453,6 @@ subroutine stepon_run2(phys_state, phys_tend, dyn_in, dyn_out )
          call outfld('FU',RESHAPE(ftmp(:,:,1), (/npsq/)),npsq,ie)
          call outfld('FV',RESHAPE(ftmp(:,:,2), (/npsq/)),npsq,ie)
       end do
-   endif
    endif
 
    do ie = 1,nelemd
